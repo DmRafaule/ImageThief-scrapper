@@ -3,6 +3,7 @@
 ## What this scrapper do:
 * Download all images from specified website
 * Compile a lists of internal and external links
+* Continue to parse after exiting from program
 
 ## What this scrapper can't do:
 * Render a website to find more hiden links

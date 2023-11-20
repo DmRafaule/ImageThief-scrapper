@@ -2,11 +2,21 @@ from enum import Enum
 import os
 import json
 import time
+from datetime import date
 
 from bs4 import BeautifulSoup
 import requests
 
-from config import HEADERS, VERSION
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/119.0",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Encoding": "identify",
+    "DNT": "1",
+    "Connection": "keep-alive",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+}
+VERSION = "05"
 
 
 class LinkType(Enum):
@@ -17,69 +27,133 @@ class LinkType(Enum):
 class WebCrawler:
     url = str
     domain = str
+    _scanTime = int
     _dataFile = "data.json"
     _logFile = "log.txt"
     _workDirectory = "WebCrawler_"
 
-    def __init__(self, url: str):
+    def __init__(self, url: str, noisy: bool = True):
+        if not noisy:
+            self.__log = self.__log_q
         start = time.time()
         self.url = url
         self.__initWorkDirectory()
         self._dataFile = self._workDirectory + "/" + self._dataFile
         self._logFile = self._workDirectory + "/" + self._logFile
+        self._scanTime = str(date.today())
         self.__initLogFile()
         if not os.path.exists(self._dataFile):
             self.__initDataFile()
-        # Get first, root one links, if database is empty
-        if self.__dataIsEmpty():
+        current = self.__dataGetCurrentLink()
+        if current == 0:
             self.__crawlSitemap(url + "/" + "sitemap.xml")
             self.__log(f"Status: Found {len(self.__dataGetLinks(LinkType.INTERNAL))} internal links.")
-            links = self.__dataGetLinks(LinkType.INTERNAL)
-            current = self.__dataGetCurrentLink()
-            self.__crawl(self.url + links[current])
-        # Otherwise load data from database and continue
-        else:
-            links = self.__dataGetLinks(LinkType.INTERNAL)
-            current = self.__dataGetCurrentLink()
-            if not current >= len(links):
-                self.__crawl(self.url + links[current])
+        links = self.__dataGetLinks(LinkType.INTERNAL)
+        if not current >= len(links):
+            self.__crawl(self.url + links[current]['url'])
 
         end = time.time()
-        self.__log(f"Status: Total internal links ({len(self.__dataGetLinks(LinkType.INTERNAL))})")
-        self.__log(f"Status: Total external links ({len(self.__dataGetLinks(LinkType.EXTERNAL))})")
-        self.__log(f"Status: Total crawling execution time ({end - start}) sec..")
+        self.__log(f"Result: Total internal links ({len(self.__dataGetLinks(LinkType.INTERNAL))})")
+        self.__log(f"Result: Total external links ({len(self.__dataGetLinks(LinkType.EXTERNAL))})")
+        self.__log(f"Result: Total crawling execution time ({end - start}) sec..")
 
     def __crawl(self, url: str):
-        page = requests.get(url=url, headers=HEADERS, timeout=5)
-        soup = BeautifulSoup(page.text, 'lxml')
-        for link in soup.find_all("a"):
-            if link.has_attr('href'):
-                if link['href'].startswith(('/')):
-                    self.__dataLinkInsert(link['href'], LinkType.INTERNAL)
-                else:
-                    if link['href'].startswith((self.url, self.url.replace("https", "http"), self.url.replace("http", "https"))):
-                        self.__dataLinkInsert(link['href'].replace(self.url, ""), LinkType.INTERNAL)
+        status = "Ok"
+        try:
+            if self.__crawlable(url):
+                page = requests.get(url=url, headers=HEADERS, timeout=1)
+            else:
+                raise NotImplementedError
+        except requests.exceptions.HTTPError as e:
+            self.__log(f"Error: {e.args[0]}.")
+            status = "NotOk"
+        except requests.exceptions.ReadTimeout:
+            self.__log("Error: Time out.")
+            status = "NotOk"
+        except requests.exceptions.ConnectionError as e:
+            self.__log(f"Error: Something wrong with connection. {e}")
+            status = "NotOk"
+        except requests.exceptions.RequestException as e:
+            self.__log(f"Error: While trying make request. {e}")
+            status = "NotOk"
+        except NotImplementedError:
+            self.__log("Error: Could parse file with such extention name.")
+            status = "NotOk"
+        else:
+            soup = BeautifulSoup(page.text, 'lxml')
+            for link in soup.find_all("a"):
+                # Does our link even has 'href' attribute and it is not 'anchor' link
+                if link.has_attr('href') and "#" not in link['href']:
+                    if link['href'].startswith(('/')):
+                        self.__dataLinkInsert(link['href'], LinkType.INTERNAL, page.status_code)
                     else:
-                        if link['href'].startswith(("https://", "http://")):
-                            self.__dataLinkInsert(link['href'], LinkType.EXTERNAL)
-        self.__dataSetCurrentLink(self.__dataGetCurrentLink() + 1)
-        current = self.__dataGetCurrentLink()
-        links = self.__dataGetLinks(LinkType.INTERNAL)
-        self.__log(f"Ok: {current}/{len(links)} {url}")
-        if not current >= len(links):
-            self.__crawl(self.url + links[current])
+                        if link['href'].startswith((self.url, self.url.replace("https", "http"), self.url.replace("http", "https"))):
+                            self.__dataLinkInsert(link['href'].replace(self.url, ""), LinkType.INTERNAL, page.status_code)
+                        else:
+                            if link['href'].startswith(("https://", "http://")):
+                                self.__dataLinkInsert(link['href'], LinkType.EXTERNAL, page.status_code)
+        finally:
+            self.__dataSetCurrentLink(self.__dataGetCurrentLink() + 1)
+            current = self.__dataGetCurrentLink()
+            links = self.__dataGetLinks(LinkType.INTERNAL)
+            self.__log_a(f"{status}: {current}/{self.__dataGetLinkNumber()} {url}")
+            if not current >= self.__dataGetLinkNumber():
+                self.__crawl(self.url + links[current]['url'])
 
     # Walk through sitemap file
     def __crawlSitemap(self, sitemap: str):
+        status = "Ok"
         self.__log("Status: Checking sitemap.")
-        page = requests.get(url=sitemap, headers=HEADERS)
-        soup = BeautifulSoup(page.text, 'xml')
-        for sm in soup.find_all('loc'):
-            if ".xml" in sm.text:
-                self.__log(f"Status: Found new sub sitemap ({sm.text})")
-                self.__crawlSitemap(sm.text)
+        try:
+            if self.__crawlable(sitemap):
+                page = requests.get(url=sitemap, headers=HEADERS, timeout=1)
             else:
-                self.__dataLinkInsert(sm.text.replace(self.url, ""), LinkType.INTERNAL)
+                # Maybe make your own Exception class
+                raise NotImplementedError
+        except requests.exceptions.HTTPError as e:
+            self.__log(f"Error: {e.args[0]}.")
+            status = "NotOk"
+        except requests.exceptions.ReadTimeout as e:
+            self.__log(f"Error: Time out. {e}")
+            status = "NotOk"
+        except requests.exceptions.ConnectionError as e:
+            self.__log(f"Error: Something wrong with connection. {e}")
+            status = "NotOk"
+        except requests.exceptions.RequestException as e:
+            self.__log(f"Error: While trying make request. {e}")
+            status = "NotOk"
+        except NotImplementedError:
+            self.__log("Error: Could parse file with such extention name.")
+            status = "NotOk"
+        else:
+            soup = BeautifulSoup(page.text, 'xml')
+            for sm in soup.find_all('loc'):
+                if ".xml" in sm.text:
+                    self.__log(f"{status}: New sub sitemap ({sm.text})")
+                    self.__crawlSitemap(sm.text)
+                else:
+                    self.__dataLinkInsert(sm.text.replace(self.url, ""), LinkType.INTERNAL, page.status_code)
+
+    def __crawlable(self, url: str) -> bool:
+        notcrawlable_ext = (
+            ".zip",
+            ".mp4",
+            ".mp3",
+            ".js",
+            ".css",
+            ".tar",
+            ".7z",
+            ".png",
+            ".jpg",
+            ".webp",
+            ".svg",
+            ".gz",
+            ".ico",
+            ".pdf",
+        )
+        if url.endswith(notcrawlable_ext):
+            return False
+        return True
 
     def __dataClenUpDuplicates(self):
         self.__log("Ok: Remove duplicated urls.")
@@ -119,16 +193,31 @@ class WebCrawler:
         with open(self._dataFile, "w", encoding="utf-8") as F:
             json.dump(data, F, indent=2)
 
-    def __dataLinkInsert(self, link: str, type: LinkType):
+    def __dataGetLinkNumber(self) -> int:
+        with open(self._dataFile, "r", encoding="utf-8") as F:
+            data = json.load(F)
+            return data['link_number']
+
+    def __dataLinkInsert(self, link: str, type: LinkType, status_code: int):
         # Before use type var. It is neccessary to convert it to string
         type = self.__linkTypeToStr(type)
         with open(self._dataFile, "r", encoding="utf-8") as F:
             data = json.load(F)
-            if link not in data[type]:
+            for dataLink in data[type]:
+                if link == dataLink['url']:
+                    break
+            else:
                 self.__log(f"Status: Found new link ({link})")
-                data[type].append(link)
+                if type == self.__linkTypeToStr(LinkType.INTERNAL):
+                    data["link_number"] += 1
+                data[type].append({'url': link, 'status': status_code, 'scan_date': self._scanTime})
                 with open(self._dataFile, "w", encoding="utf-8") as Fw:
-                    json.dump(data, Fw, indent=2)
+                    # Make sure that data will be dumped. 
+                    # Sometime Keyboard interruption break a data file
+                    try:
+                        json.dump(data, Fw, indent=2)
+                    except Exception:
+                        json.dump(data, Fw, indent=2)
 
     def __initWorkDirectory(self):
         end = self.url.find(".")
@@ -156,6 +245,7 @@ class WebCrawler:
             json.dump({
                 "version": "#WEBCRAWLER_" + VERSION + "#",
                 "domain": self.domain,
+                "link_number": 0,
                 "current_link": 0,
                 "external_links": [],
                 "internal_links": [],
@@ -176,8 +266,14 @@ class WebCrawler:
             F.write(message)
             F.write("\n")
 
-    def getAllInternalLinks(self):
+    def __log_a(self, message: str):
+        print(message)
+
+    def __log_q(self, message: str, toConsole: bool = True):
+        pass
+
+    def getAllInternalLinks(self) -> dict:
         return self.__dataGetLinks(LinkType.INTERNAL)
 
-    def getAllExternalLinks(self):
+    def getAllExternalLinks(self) -> dict:
         return self.__dataGetLinks(LinkType.EXTERNAL)

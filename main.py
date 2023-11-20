@@ -1,19 +1,28 @@
-from bs4 import BeautifulSoup
-from config import URL, HEADERS, LOG_FILE
-from requests import get
+from config import HEADERS, LOG_FILE
+import requests
 import re
 
 from crawler import WebCrawler
+from scrapper import ImgScrapper
 
 
-def downloadAllImagesFromSite(url: str = None) -> bool:
-    spider = WebCrawler(url=url)
+def downloadAllImagesFromSite(
+        url: str = None,
+        noisy: bool = True) -> None:
+
+    spider = WebCrawler(url, noisy)
+    links_to_scrapp = spider.getAllInternalLinks()
+
+    scrapper = ImgScrapper(url, noisy)
+    scrapper.scrape(*links_to_scrapp)
+    scrapper.download()
+    scrapper.zip()
 
 
 def requestWebsiteUrl() -> dict:
     # Check if url is valid
     url = input("Enter valid URL of website: ")
-    code = get(url=url, headers=HEADERS)
+    code = requests.get(url=url, headers=HEADERS)
     regex = '^((http|https)://)[-a-zA-Z0-9@:%._\\+~#?&//=]{2,256}\\.[a-z]{2,6}\\b([-a-zA-Z0-9@:%._\\+~#?&//=]*)$'
     r = re.compile(regex)
     if re.search(r, url) and code.status_code == 200:
@@ -31,8 +40,7 @@ def initScrappingWebsite(url: str) -> None:
     if end == -1:
         end = len(url)
     url = url[:end]
-    global URL
-    URL = url
+    return url
 
 
 def initLoggerFile(filename: str) -> None:
@@ -50,13 +58,8 @@ def log(message: str):
 
 if __name__ == "__main__":
     initLoggerFile(LOG_FILE)
-    #rwu = requestWebsiteUrl()
-    #if rwu["isValid"]:
-    if True:
-        initScrappingWebsite(URL)
-        if downloadAllImagesFromSite(url=URL):
-            log(f"Ok: Successfully scrapped all images from website: {URL}.")
-        else:
-            log(f"Error(downloadAllImagesFromSite(rwu['url'])): Could not load images from {URL}.")
+    rwu = requestWebsiteUrl()
+    if rwu["isValid"]:
+        downloadAllImagesFromSite(initScrappingWebsite(rwu['url']), noisy=True)
     else:
         log(f"Error(if rwu['isValid']:): This url, {rwu['url']}, is invalid.")
