@@ -1,15 +1,25 @@
-from config import HEADERS, LOG_FILE
-import requests
-import re
+from WebCrawler.crawler import WebCrawler
+from ImgScrapper.scrapper import ImgScrapper
+from Utils.utils import log, initFolder, initFile, checkURL, toMinimalURL
+from Utils.utils import toDomainURL, debug, initDataFile
+import config as C
 
-from crawler import WebCrawler
-from scrapper import ImgScrapper
+
+def downloadAllImagesFromPage(
+        url: str = None,
+        noisy: bool = True) -> None:
+    log(f"Status: Download images from single page ({C.URL}).", C.LOG_FILE)
+    scrapper = ImgScrapper(url, noisy)
+    scrapper.scrape(url)
+    scrapper.download()
+    scrapper.zip()
 
 
 def downloadAllImagesFromSite(
         url: str = None,
-        noisy: bool = True) -> None:
-
+        noisy: bool = True,
+        mode: C.ScrappingMode = C.ScrappingMode.FULL) -> None:
+    log(f"Status: Download images from whole site ({C.URL}).", C.LOG_FILE)
     spider = WebCrawler(url, noisy)
     links_to_scrapp = spider.getAllInternalLinks()
 
@@ -19,47 +29,27 @@ def downloadAllImagesFromSite(
     scrapper.zip()
 
 
-def requestWebsiteUrl() -> dict:
-    # Check if url is valid
-    url = input("Enter valid URL of website: ")
-    code = requests.get(url=url, headers=HEADERS)
-    regex = '^((http|https)://)[-a-zA-Z0-9@:%._\\+~#?&//=]{2,256}\\.[a-z]{2,6}\\b([-a-zA-Z0-9@:%._\\+~#?&//=]*)$'
-    r = re.compile(regex)
-    if re.search(r, url) and code.status_code == 200:
-        log(f"Ok: {url} is valid.")
-        return {"isValid": True, "url": url}
-    else:
-        log(f"Error: {url} is not valid.")
-        return {"isValid": False, "url": url}
-
-
-def initScrappingWebsite(url: str) -> None:
-    # Remove from string any unneccesary strings
-    end = url.find(".")
-    end = url.find("/", end)
-    if end == -1:
-        end = len(url)
-    url = url[:end]
-    return url
-
-
-def initLoggerFile(filename: str) -> None:
-    with open(filename, "w", encoding="utf-8") as F:
-        F.write("#INIT LOGGER FILE#")
-        F.write("\n")
-
-
-def log(message: str):
-    print(message)
-    with open(LOG_FILE, "a", encoding="utf-8") as F:
-        F.write(message)
-        F.write("\n")
-
-
 if __name__ == "__main__":
-    initLoggerFile(LOG_FILE)
-    rwu = requestWebsiteUrl()
-    if rwu["isValid"]:
-        downloadAllImagesFromSite(initScrappingWebsite(rwu['url']), noisy=True)
+    initFolder(C.RESULT_FOLDER)
+    C.RESULT_FOLDER += "/tmp_" + toDomainURL(C.URL)
+    initFolder(C.RESULT_FOLDER)
+    C.IMAGES_FOLDER = C.RESULT_FOLDER + "/" + C.IMAGES_FOLDER
+    initFolder(C.IMAGES_FOLDER)
+    C.LOG_FILE = C.RESULT_FOLDER + "/" + C.LOG_FILE
+    initFile(C.LOG_FILE)
+    C.DATA_FILE = C.RESULT_FOLDER + "/" + C.DATA_FILE
+    initDataFile(C.DATA_JSON_TEMPLATE, C.DATA_FILE)
+    log(f"""
+    {C.NAME} v{C.VERSION}
+    by {C.AUTHOR}
+    from the website: {C.SOURCE_WEBSITE}
+
+============================================\n""", C.LOG_FILE)
+    if checkURL(C.URL):
+        if C.MODE is not C.ScrappingMode.SINGLE_PAGE:
+            C.URL = toMinimalURL(C.URL)
+            downloadAllImagesFromSite(C.URL, C.VERBOSE, C.MODE)
+        else:
+            downloadAllImagesFromPage(C.URL, C.VERBOSE)
     else:
-        log(f"Error(if rwu['isValid']:): This url, {rwu['url']}, is invalid.")
+        log(f"Error(checkURL): This url, {C.URL}, is invalid.")
