@@ -4,7 +4,6 @@ import random
 import string
 import json
 from zipfile import ZipFile, ZIP_DEFLATED
-from datetime import date
 
 from bs4 import BeautifulSoup
 import requests
@@ -22,12 +21,10 @@ def GetRandomString(length: int) -> str:
 class ImgScrapper:
     url = str
     domain = str
-    _scanTime = int
 
     def __init__(self, url: str, noisy: bool = True):
         self.url = url
         self.domain = toDomainURL(url)
-        self._scanTime = str(date.today())
 
     def scrape(self, *urls):
         start = time.time()
@@ -84,6 +81,7 @@ class ImgScrapper:
         end = time.time()
         log(f"Result: Total scraping execution time ({end - start}) sec..", C.LOG_FILE)
         log(f"Result: Total scrapped images {self.__dataGetImgsNumber()} in {self.__dataGetPageNumber()} pages", C.LOG_FILE)
+        self.__dataSetCurrentLink(0)
 
     def download(self):
         log("Status: Start downloading images.", C.LOG_FILE)
@@ -122,6 +120,9 @@ class ImgScrapper:
                 full_filename = "./" + C.IMAGES_FOLDER + "/" + file
                 log(f"Ok: Archived {full_filename}", C.LOG_FILE)
                 Z.write(full_filename)
+
+    def getImgs(self) -> []:
+        return self.__dataGetImgs()
 
     def __dataGetPageNumber(self) -> int:
         with open(C.DATA_FILE, "r", encoding="utf-8") as F:

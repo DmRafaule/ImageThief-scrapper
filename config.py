@@ -2,20 +2,24 @@ from enum import Enum
 
 
 class ScrappingMode(Enum):
-    # Scrape full website, without exceptions
+    # Scrape full website, without exceptions `URL and everything it can find
     FULL = 0,
-    # First scrape fill be like in FULL mode,
-    # But in next iterations will be check hash sums
-    # And scrape only different ones
-    MONITORE = 1,
-    # Scrape only single page
-    SINGLE_PAGE = 2,
+    # Scrape only single page `URL
+    SINGLE_PAGE = 1,
+    # Scrape list of pages `URLS
+    LIST_PAGES = 2
 
 
 # Target URL
 URL = "https://www.historiesofhumanity.com"
+# List of URLS (ignored if ScrappingMode not `LIST_PAGES)
+URLS = [
+    "https://timthewebmaster.com",
+    "https://www.historiesofhumanity.com",
+    "https://web7.pro",
+]
 # Mode in which this script gonna work
-MODE = ScrappingMode.FULL
+MODE = ScrappingMode.LIST_PAGES
 # Is program gonna make a lot of output to terminal ?
 VERBOSE = True
 # Headers for parser
@@ -39,7 +43,7 @@ DATA_FILE = "data.json"
 # Name of program
 NAME = "ImageStealer"
 # Version of program
-VERSION = "07"
+VERSION = "08"
 # Creator of this program
 AUTHOR = "Tim the Webmaster"
 # Where it can be found

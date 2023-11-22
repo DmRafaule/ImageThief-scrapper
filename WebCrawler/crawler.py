@@ -1,8 +1,6 @@
 from enum import Enum
-import os
 import json
 import time
-from datetime import date
 
 from bs4 import BeautifulSoup
 import requests
@@ -19,12 +17,10 @@ class LinkType(Enum):
 class WebCrawler:
     url = str
     domain = str
-    _scanTime = int
 
     def __init__(self, url: str, noisy: bool = True):
         start = time.time()
         self.url = url
-        self._scanTime = str(date.today())
         current = self.__dataGetCurrentLink()
         if current == 0:
             self.__crawlSitemap(url + "/" + "sitemap.xml")
@@ -197,7 +193,9 @@ class WebCrawler:
                 log(f"Ok: Found new link ({link})", C.LOG_FILE)
                 if type == self.__linkTypeToStr(LinkType.INTERNAL):
                     data["links_number"] += 1
-                data[type].append({'url': link, 'status': status_code, 'scan_date': self._scanTime})
+                data[type].append({
+                    'url': link,
+                })
                 with open(C.DATA_FILE, "w", encoding="utf-8") as Fw:
                     # Make sure that data will be dumped. 
                     # Sometime Keyboard interruption break a data file
