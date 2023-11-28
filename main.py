@@ -1,3 +1,4 @@
+from urllib.parse import urlparse
 from WebCrawler.crawler import WebCrawler
 from ImgScrapper.scrapper import ImgScrapper
 from Utils.utils import log, initFolder, initFile, checkURL, toMinimalURL
@@ -48,7 +49,7 @@ if __name__ == "__main__":
     if C.MODE is C.ScrappingMode.LIST_PAGES and len(C.URLS) > 0:
         C.RESULT_FOLDER += "/tmp_" + toDomainURL(C.URLS[0])
     else:
-        C.RESULT_FOLDER += "/tmp_" + toDomainURL(C.URL)
+        C.RESULT_FOLDER += "/tmp_" + urlparse(C.URL).hostname
     initFolder(C.RESULT_FOLDER)
     C.IMAGES_FOLDER = C.RESULT_FOLDER + "/" + C.IMAGES_FOLDER
     initFolder(C.IMAGES_FOLDER)

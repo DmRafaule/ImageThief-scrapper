@@ -29,8 +29,17 @@ class WebCrawler:
         length = len(links)
         if length == 0:
             self.__crawl(self.url)
-        if not current >= length:
-            self.__crawl(self.url + links[current]['url'])
+
+        while True:
+            links = self.__dataGetLinks(LinkType.INTERNAL)
+            length = len(links)
+
+            for link in links[current:]:
+                self.__crawl(self.url + link["url"])
+            if current == length:
+                break
+
+            current = self.__dataGetCurrentLink()
 
         end = time.time()
         log(f"Result: Total internal links ({len(self.__dataGetLinks(LinkType.INTERNAL))})", C.LOG_FILE)
@@ -57,28 +66,29 @@ class WebCrawler:
             log(f"Error: While trying make request. {e}", C.LOG_FILE)
             status = "NotOk"
         except NotImplementedError:
-            log("Error: Could parse file with such extention name.", C.LOG_FILE)
+            log("Error: Could not parse file with such extention name.", C.LOG_FILE)
             status = "NotOk"
         else:
             soup = BeautifulSoup(page.text, 'lxml')
             for link in soup.find_all("a"):
                 # Does our link even has 'href' attribute and it is not 'anchor' link
                 if link.has_attr('href') and "#" not in link['href']:
-                    if link['href'].startswith(('/')):
-                        self.__dataLinkInsert(link['href'], LinkType.INTERNAL, page.status_code)
-                    else:
-                        if link['href'].startswith((self.url, self.url.replace("https", "http"), self.url.replace("http", "https"))):
-                            self.__dataLinkInsert(link['href'].replace(self.url, ""), LinkType.INTERNAL, page.status_code)
+                    if self.__crawlable(link["href"]):
+                        if link['href'].startswith(('/')):
+                            self.__dataLinkInsert(link['href'], LinkType.INTERNAL, page.status_code)
                         else:
-                            if link['href'].startswith(("https://", "http://")):
-                                self.__dataLinkInsert(link['href'], LinkType.EXTERNAL, page.status_code)
+                            if link['href'].startswith((self.url, self.url.replace("https", "http"), self.url.replace("http", "https"))):
+                                self.__dataLinkInsert(link['href'].replace(self.url, ""), LinkType.INTERNAL, page.status_code)
+                            else:
+                                if link['href'].startswith(("https://", "http://")):
+                                    self.__dataLinkInsert(link['href'], LinkType.EXTERNAL, page.status_code)
         finally:
             self.__dataSetCurrentLink(self.__dataGetCurrentLink() + 1)
             current = self.__dataGetCurrentLink()
-            links = self.__dataGetLinks(LinkType.INTERNAL)
+            # links = self.__dataGetLinks(LinkType.INTERNAL)
             log(f"{status}: {current}/{self.__dataGetLinkNumber()} {url}", C.LOG_FILE)
-            if not current >= self.__dataGetLinkNumber():
-                self.__crawl(self.url + links[current]['url'])
+            # if not current >= self.__dataGetLinkNumber():
+             #    self.__crawl(self.url + links[current]['url'])
 
     # Walk through sitemap file
     def __crawlSitemap(self, sitemap: str):

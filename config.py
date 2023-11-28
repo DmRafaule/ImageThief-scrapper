@@ -11,7 +11,7 @@ class ScrappingMode(Enum):
 
 
 # Target URL
-URL = "https://www.historiesofhumanity.com"
+URL = "https://timthewebmaster.com/ru"
 # List of URLS (ignored if ScrappingMode not `LIST_PAGES)
 URLS = [
     "https://timthewebmaster.com",
@@ -19,7 +19,7 @@ URLS = [
     "https://web7.pro",
 ]
 # Mode in which this script gonna work
-MODE = ScrappingMode.LIST_PAGES
+MODE = ScrappingMode.SINGLE_PAGE
 # Is program gonna make a lot of output to terminal ?
 VERBOSE = True
 # Headers for parser
